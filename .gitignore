@@ -1,0 +1,8 @@
+configs.yaml
+data/
+results/
+models/
+.DS_Store
+__pycache__/
+venv/
+wandb/
