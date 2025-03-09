@@ -8,29 +8,41 @@ DATA:
 
   S3_BUCKET: "cad-brbh-datascience"
   S3_INPUT_DIR: "s3://cad-brbh-datascience/alexnet_image_classification/"
-  S3_TRAIN_DIR: "s3://cad-brbh-datascience/alexnet_image_classification/data/full/train/"
-  S3_VAL_DIR: "s3://cad-brbh-datascience/alexnet_image_classification/data/full/valid/"
+  S3_TRAIN_DIR: "s3://cad-brbh-datascience/alexnet_image_classification/data/processed/train/"
+  S3_VAL_DIR: "s3://cad-brbh-datascience/alexnet_image_classification/data/processed/valid/"
   S3_CHECKPOINT_DIR: "s3://cad-brbh-datascience/alexnet_image_classification/checkpoints"
   S3_OUTPUT_DIR: "s3://cad-brbh-datascience/alexnet_image_classification/models"
 
 MODEL:
-  NUM_CLASSES: 10
+  NUM_CLASSES: 3
   RESIZE: 224
 
 TRAINING:
   EPOCHS: 100
-  BATCH_SIZE: 128
-  LEARNING_RATE: 0.0005
+  BATCH_SIZE: 64
+  LEARNING_RATE: 0.001
 
 OPTIMIZER:
   OPTIMIZER: "SGD"
-  WEIGHT_DECAY: 0.00001
   SGD_MOMENTUM: 0.9
+
+
+REGULARIZATION:
+  WEIGHT_DECAY: 0.0001
+
+SCHEDULER:
+  SCHEDULER: "StepLR"
+  STEP_SIZE: 10
+  GAMMA: 0.05
 
 AUGMENTATION:
   AUGMENTATION_TRANSFORMATIONS:
-    p: 0.2
+    p: 0.4
     shift_limit: 0.05
     scale_limit: 0.05
-    rotate_limit: 15
-    border_mode: "constant"
+    rotate_limit: 5
+    border_mode: "reflect_101"
+
+
+# Weight decay is used to prevent zig-zagging during training. Less WD -> more zig-zagging.
+# SGD momentum is used to accelerate convergence. More momentum -> faster convergence.

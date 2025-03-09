@@ -1,6 +1,8 @@
 import torch
 import torch.optim as optim
 import torch.nn as nn
+from torch.optim.lr_scheduler import StepLR
+#from torch_lr_finder import LRFinder
 from torch.utils.data import DataLoader
 import os
 import argparse
@@ -103,7 +105,7 @@ def evaluate_model(model: nn.Module, val_dataloader: DataLoader, criterion: nn.M
     correct_predictions = 0
     total = 0
 
-    confusion_matrix = torch.zeros(10, 10, dtype=torch.int64)
+    confusion_matrix = torch.zeros(3, 3, dtype=torch.int64)
 
     with torch.no_grad():
         for images, labels, _ in val_dataloader:
@@ -129,7 +131,7 @@ def evaluate_model(model: nn.Module, val_dataloader: DataLoader, criterion: nn.M
     return average_loss, accuracy, confusion_matrix, f1_score
 
 
-def train_model(model: nn.Module, total_epochs: int, start_epoch: int, train_dataloader: DataLoader, val_dataloader: DataLoader, criterion: nn.Module, optimizer: optim.Optimizer, device: torch.device) -> tuple[list[float], list[float], list[float], list[float], torch.Tensor, float]:
+def train_model(model: nn.Module, total_epochs: int, start_epoch: int, train_dataloader: DataLoader, val_dataloader: DataLoader, criterion: nn.Module, optimizer: optim.Optimizer, scheduler: optim.lr_scheduler.StepLR, device: torch.device) -> tuple[list[float], list[float], list[float], list[float], torch.Tensor, float]:
     """
     Train the model and evaluate it on the validation set at each epoch.
     Saves checkpoints and the best model based on macro F1 score.
@@ -157,12 +159,12 @@ def train_model(model: nn.Module, total_epochs: int, start_epoch: int, train_dat
     train_accuracies = []
     val_losses = []
     val_accuracies = []
-    tolerance = 5
 
     model.train()
 
     best_f1_score = 0
-    best_val_acc = 0
+    tolerance = 7
+    
     for epoch in range(start_epoch, total_epochs):
         epoch_loss = 0
         correct_predictions = 0
@@ -217,6 +219,7 @@ def train_model(model: nn.Module, total_epochs: int, start_epoch: int, train_dat
 
         if f1_score > best_f1_score:
             best_f1_score = f1_score
+            tolerance = 7
             torch.save({
                 "model_state_dict": model.state_dict(),
                 "epoch": epoch + 1,
@@ -232,31 +235,57 @@ def train_model(model: nn.Module, total_epochs: int, start_epoch: int, train_dat
         print(f"- val_loss: {val_loss:.4f} | val_accuracy: {val_acc:.4f} | f1_score: {f1_score:.4f}")
         print(f"-" * 50)
 
-        # if val_acc >= 0.91:
-        #     if val_acc > best_val_acc:
-        #         best_val_acc = val_acc
-        #         tolerance = 5
-        #     else:
-        #         tolerance -= 1
-        #     if tolerance <= 0:
-        #         torch.save({
-        #             "model_state_dict": model.state_dict(),
-        #             "epoch": epoch + 1,
-        #             "loss": epoch_loss,
-        #             "accuracy": epoch_accuracy,
-        #             "optimizer_state_dict": optimizer.state_dict(),
-        #         }, os.path.join(args.checkpoint_dir,  f"best_model_early_stop.pth"))
-                
-        #         print(f"Early stopping at epoch {epoch+1} - f1_score: {f1_score:.4f}, val_accuracy: {val_acc:.4f}, val_loss: {val_loss:.4f}")
-        #         wandb.log({"last_epoch": epoch+1})
-                
-        #         break
+        if f1_score <= best_f1_score - 0.03 or f1_score == best_f1_score:
+            tolerance -= 1
 
+        if tolerance <= 0:    
+            torch.save({
+                "model_state_dict": model.state_dict(),
+                "epoch": epoch + 1,
+                "loss": epoch_loss,
+                "accuracy": epoch_accuracy,
+                "optimizer_state_dict": optimizer.state_dict(),
+            }, os.path.join(args.checkpoint_dir,  f"best_model_early_stop.pth"))
+        
+            print(f"Early stopping at epoch {epoch+1} - f1_score: {f1_score:.4f}, val_accuracy: {val_acc:.4f}, val_loss: {val_loss:.4f}")
+            wandb.log({"last_epoch": epoch+1})
+
+
+        if f1_score > 0.95:
+            torch.save({
+                "model_state_dict": model.state_dict(),
+                "epoch": epoch + 1,
+                "loss": epoch_loss,
+                "accuracy": epoch_accuracy,
+                "optimizer_state_dict": optimizer.state_dict(),
+            }, os.path.join(args.checkpoint_dir,  f"best_model_early_stop.pth"))
+        
+            print(f"Early stopping at epoch {epoch+1} - f1_score: {f1_score:.4f}, val_accuracy: {val_acc:.4f}, val_loss: {val_loss:.4f}")
+            wandb.log({"last_epoch": epoch+1})
+        
+            break
+
+
+        # if epoch > 10:
+        #     scheduler.step()
+    
     final_model_path = os.path.join(args.model_dir, "final_alexnet_model.pth")
     torch.save(model.state_dict(), final_model_path)
 
     return train_losses, train_accuracies, val_losses, val_accuracies, confusion_matrix, f1_score
 
+# def find_lr(model, train_loader, val_loader, optimizer, criterion, device):
+#     lr_finder = LRFinder(model, optimizer, criterion, device=device)
+#     lr_finder.range_test(train_loader, val_loader, start_lr=0.00001, end_lr=0.01, num_iter=100, step_mode="linear")
+#     lr_finder.plot(log_lr=False)
+#     try:
+#         plt.savefig("/opt/ml/checkpoints/lr_finder.png")
+#         plt.close()
+#     except Exception as e:
+#         print(e)
+#     print(lr_finder.history)
+    
+#     lr_finder.reset()
 
 def main(args: argparse.Namespace, config: dict):
     """
@@ -268,29 +297,7 @@ def main(args: argparse.Namespace, config: dict):
         args (argparse.Namespace): Command line arguments.
     """
 
-
-    augmentation_transformations = config["AUGMENTATION"]["AUGMENTATION_TRANSFORMATIONS"]
-
-    wandb.init(
-        project="AlexNet_Image_Classification",
-        name=f"{args.model_name}_{datetime.now().strftime('%d-%m-%Y_%H-%M')}",
-        config={
-            "epochs": args.epochs,
-            "batch_size": args.batch_size,
-            "learning_rate": args.learning_rate,
-            "num_classes": args.num_classes,
-            "resize": args.resize,
-            "optimizer": config["OPTIMIZER"]["OPTIMIZER"],
-            "weight_decay": config["OPTIMIZER"]["WEIGHT_DECAY"],
-            "shift_limit": augmentation_transformations["shift_limit"],
-            "scale_limit": augmentation_transformations["scale_limit"],
-            "rotate_limit": augmentation_transformations["rotate_limit"],
-            "border_mode": augmentation_transformations["border_mode"],
-            "p": augmentation_transformations["p"],
-            "last_epoch": args.epochs,
-            "sgd_momentum": config["OPTIMIZER"]["SGD_MOMENTUM"],
-        },
-    )
+    augmentation_transformations = config["AUGMENTATION"]["AUGMENTATION_TRANSFORMATIONS"]    
 
     os.makedirs(args.checkpoint_dir, exist_ok=True)
 
@@ -304,7 +311,11 @@ def main(args: argparse.Namespace, config: dict):
     criterion = torch.nn.CrossEntropyLoss()
 
     if config["OPTIMIZER"]["OPTIMIZER"] == "SGD":
-        optimizer = optim.SGD(model.parameters(), args.learning_rate, momentum=config["OPTIMIZER"]["SGD_MOMENTUM"], weight_decay=config["OPTIMIZER"]["WEIGHT_DECAY"])
+        optimizer = optim.SGD(model.parameters(), args.learning_rate, momentum=config["OPTIMIZER"]["SGD_MOMENTUM"], weight_decay=config["REGULARIZATION"]["WEIGHT_DECAY"])
+
+    # find_lr(model, train_dataloader, val_dataloader, optimizer, criterion, device)
+    # exit()
+    scheduler = StepLR(optimizer, config["SCHEDULER"]["STEP_SIZE"], config["SCHEDULER"]["GAMMA"])
 
     resume_epoch = 0
     if args.resume_checkpoint is not None:
@@ -314,7 +325,30 @@ def main(args: argparse.Namespace, config: dict):
         resume_epoch = checkpoint["epoch"]
         print(f"Resuming training from epoch: {resume_epoch}")
 
-    train_losses, train_accuracies, val_losses, val_accuracies, confusion_matrix, f1_scores = train_model(model, args.epochs, resume_epoch, train_dataloader, val_dataloader, criterion, optimizer, device)
+    wandb.init(
+        project="AlexNet_Image_Classification",
+        name=f"{args.model_name}_{args.timestamp}",
+        config={
+            "epochs": args.epochs,
+            "batch_size": args.batch_size,
+            "learning_rate": float(args.learning_rate),
+            "num_classes": args.num_classes,
+            "resize": args.resize,
+            "optimizer": config["OPTIMIZER"]["OPTIMIZER"],
+            "weight_decay": config["REGULARIZATION"]["WEIGHT_DECAY"],
+            "shift_limit": augmentation_transformations["shift_limit"],
+            "scale_limit": augmentation_transformations["scale_limit"],
+            "rotate_limit": augmentation_transformations["rotate_limit"],
+            "border_mode": augmentation_transformations["border_mode"],
+            "p": augmentation_transformations["p"],
+            "last_epoch": args.epochs,
+            "sgd_momentum": config["OPTIMIZER"]["SGD_MOMENTUM"],
+            "step_size": config["SCHEDULER"]["STEP_SIZE"],
+            "gamma": config["SCHEDULER"]["GAMMA"]
+        },
+    )
+
+    train_losses, train_accuracies, val_losses, val_accuracies, confusion_matrix, f1_scores = train_model(model, args.epochs, resume_epoch, train_dataloader, val_dataloader, criterion, optimizer, scheduler, device)
 
     print(" * Training completed. Saving metrics plot...")
 
@@ -354,10 +388,12 @@ def main(args: argparse.Namespace, config: dict):
 
     return
 
+
+
 if __name__ == "__main__":
     with open("train.yaml", "r") as f:
         config = yaml.safe_load(f)
-
+    
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--model_name", default=config["PROJECT"]["PROJECT_NAME"])
@@ -371,6 +407,7 @@ if __name__ == "__main__":
     parser.add_argument("--resize", type=int, default=config["MODEL"]["RESIZE"])
     parser.add_argument("--checkpoint_dir", default="/opt/ml/checkpoints")
     parser.add_argument("--resume_checkpoint", default=None)
+    parser.add_argument("--timestamp", default=datetime.now().strftime("%Y%m%d_%H-%M-%S"))
     args = parser.parse_args()
 
     main(args, config)

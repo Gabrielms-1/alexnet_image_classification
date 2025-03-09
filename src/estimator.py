@@ -40,7 +40,7 @@ timestamp = datetime.now(ZoneInfo('America/Sao_Paulo')).strftime('%Y%m%d_%H-%M-%
 estimator = PyTorch(
     entry_point="train.py",
     source_dir="src",
-    instance_type="ml.g5.8xlarge",
+    instance_type="ml.g4dn.4xlarge",
     instance_count=1,
     role=role,
     pytorch_version="2.2",
@@ -53,6 +53,7 @@ estimator = PyTorch(
         "learning_rate": training_config["TRAINING"]["LEARNING_RATE"],
         "num_classes": training_config["MODEL"]["NUM_CLASSES"],
         "resize": training_config["MODEL"]["RESIZE"],
+        "timestamp": timestamp
     },
     base_job_name=f"{training_config['PROJECT']['PROJECT_NAME']}-RGB",
     tags=[

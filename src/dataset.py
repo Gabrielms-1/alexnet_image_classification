@@ -25,13 +25,23 @@ def get_albumentations_transform(resize: int) -> A.Compose:
 
     return A.Compose([
         A.Resize(height=resize, width=resize, interpolation=cv2.INTER_LANCZOS4, p=1.0),
-        #A.CenterCrop(height=resize, width=resize, p=1.0),
-        #A.ToGray(p=1.0), 
-        A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        #A.RandomBrightnessContrast(brightness_limit=params["brightness_limit"], contrast_limit=params["contrast_limit"], p=params["p"]),
+        A.RandomBrightnessContrast(brightness_limit=0.1, contrast_limit=0.1, p=0.5),
         A.ShiftScaleRotate(shift_limit=params["shift_limit"], scale_limit=params["scale_limit"], rotate_limit=params["rotate_limit"],
-                       border_mode=cv2.BORDER_CONSTANT, p=params["p"]),
-        #A.ElasticTransform(alpha=params["alpha"], sigma=params["sigma"], alpha_affine=params["alpha_affine"], interpolation=cv2.INTER_LANCZOS4, p=params["p"]),
+                       border_mode=cv2.BORDER_REFLECT_101, p=params["p"]),
+        A.VerticalFlip(p=1),
+        A.HorizontalFlip(p=1),
+        A.RandomShadow(p=0.3, num_shadows_limit=(1, 4), shadow_intensity_range=(0.2, 0.5)),
+        A.Sharpen(p=0.6, alpha=(0.2, 0.5), lightness=(0.2, 0.6)),
+        A.Emboss(p=0.7, alpha=(0.1, 0.3), strength=(0.1, 0.3)),
+        A.ImageCompression(quality_range=(70, 90), p=0.7),
+        A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ToTensorV2()
+    ])
+
+def get_valid_transform(resize: int) -> A.Compose:
+    return A.Compose([
+        A.Resize(height=resize, width=resize, interpolation=cv2.INTER_LANCZOS4, p=1.0),
+        A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ToTensorV2()
     ])
 
@@ -61,7 +71,10 @@ class FolderBasedDataset(Dataset):
         self.images, self.labels = self._get_images_path()
         
         self.resize = resize
-        self.transform = get_albumentations_transform(resize)
+        if "train" in self.root_dir:
+            self.transform = get_albumentations_transform(resize)
+        else:
+            self.transform = get_valid_transform(resize)
         
         self.label_map_to_int = {label: i for i, label in enumerate(sorted(set(label for label in self.labels)))}
         self.int_to_label_map = {i: label for label, i in self.label_map_to_int.items()}
@@ -128,14 +141,14 @@ def create_data_loaders(train_dataset: Dataset, valid_dataset: Dataset, batch_si
         train_dataset, 
         batch_size=batch_size, 
         shuffle=True,
-        num_workers=16,
+        num_workers=4,
         pin_memory=False)
     
     valid_loader = DataLoader(
         valid_dataset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=16,
+        num_workers=4,
         pin_memory=False)
     
     return train_loader, valid_loader

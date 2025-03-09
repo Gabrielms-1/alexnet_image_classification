@@ -6,3 +6,4 @@ albumentations==2.0.5
 seaborn==0.13.2
 boto3==1.37.0
 sagemaker==2.241.0
+torch_lr_finder==0.2.2

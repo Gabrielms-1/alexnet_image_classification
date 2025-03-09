@@ -6,3 +6,4 @@ models/
 __pycache__/
 venv/
 wandb/
+src/configs.yaml
