@@ -2,7 +2,7 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 from torch.optim.lr_scheduler import StepLR
-#from torch_lr_finder import LRFinder
+from torch_lr_finder import LRFinder
 from torch.utils.data import DataLoader
 import os
 import argparse
@@ -160,12 +160,12 @@ def train_model(model: nn.Module, total_epochs: int, start_epoch: int, train_dat
     val_losses = []
     val_accuracies = []
 
-    model.train()
-
     best_f1_score = 0
     tolerance = 7
     
     for epoch in range(start_epoch, total_epochs):
+        model.train()
+
         epoch_loss = 0
         correct_predictions = 0
         total_examples = 0
@@ -251,19 +251,19 @@ def train_model(model: nn.Module, total_epochs: int, start_epoch: int, train_dat
             wandb.log({"last_epoch": epoch+1})
 
 
-        if f1_score > 0.95:
-            torch.save({
-                "model_state_dict": model.state_dict(),
-                "epoch": epoch + 1,
-                "loss": epoch_loss,
-                "accuracy": epoch_accuracy,
-                "optimizer_state_dict": optimizer.state_dict(),
-            }, os.path.join(args.checkpoint_dir,  f"best_model_early_stop.pth"))
+        # if f1_score > 0.95:
+        #     torch.save({
+        #         "model_state_dict": model.state_dict(),
+        #         "epoch": epoch + 1,
+        #         "loss": epoch_loss,
+        #         "accuracy": epoch_accuracy,
+        #         "optimizer_state_dict": optimizer.state_dict(),
+        #     }, os.path.join(args.checkpoint_dir,  f"best_model_early_stop.pth"))
         
-            print(f"Early stopping at epoch {epoch+1} - f1_score: {f1_score:.4f}, val_accuracy: {val_acc:.4f}, val_loss: {val_loss:.4f}")
-            wandb.log({"last_epoch": epoch+1})
+        #     print(f"Early stopping at epoch {epoch+1} - f1_score: {f1_score:.4f}, val_accuracy: {val_acc:.4f}, val_loss: {val_loss:.4f}")
+        #     wandb.log({"last_epoch": epoch+1})
         
-            break
+        #     break
 
 
         # if epoch > 10:
@@ -274,18 +274,18 @@ def train_model(model: nn.Module, total_epochs: int, start_epoch: int, train_dat
 
     return train_losses, train_accuracies, val_losses, val_accuracies, confusion_matrix, f1_score
 
-# def find_lr(model, train_loader, val_loader, optimizer, criterion, device):
-#     lr_finder = LRFinder(model, optimizer, criterion, device=device)
-#     lr_finder.range_test(train_loader, val_loader, start_lr=0.00001, end_lr=0.01, num_iter=100, step_mode="linear")
-#     lr_finder.plot(log_lr=False)
-#     try:
-#         plt.savefig("/opt/ml/checkpoints/lr_finder.png")
-#         plt.close()
-#     except Exception as e:
-#         print(e)
-#     print(lr_finder.history)
+def find_lr(model, train_loader, val_loader, optimizer, criterion, device):
+    lr_finder = LRFinder(model, optimizer, criterion, device=device)
+    lr_finder.range_test(train_loader, val_loader, start_lr=0.00001, end_lr=0.01, num_iter=100, step_mode="linear")
+    lr_finder.plot(log_lr=False)
+    try:
+        plt.savefig("/opt/ml/checkpoints/lr_finder.png")
+        plt.close()
+    except Exception as e:
+        print(e)
+    print(lr_finder.history)
     
-#     lr_finder.reset()
+    lr_finder.reset()
 
 def main(args: argparse.Namespace, config: dict):
     """

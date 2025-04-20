@@ -25,15 +25,15 @@ def get_albumentations_transform(resize: int) -> A.Compose:
 
     return A.Compose([
         A.Resize(height=resize, width=resize, interpolation=cv2.INTER_LANCZOS4, p=1.0),
-        A.RandomBrightnessContrast(brightness_limit=0.1, contrast_limit=0.1, p=0.5),
-        A.ShiftScaleRotate(shift_limit=params["shift_limit"], scale_limit=params["scale_limit"], rotate_limit=params["rotate_limit"],
-                       border_mode=cv2.BORDER_REFLECT_101, p=params["p"]),
-        A.VerticalFlip(p=1),
-        A.HorizontalFlip(p=1),
-        A.RandomShadow(p=0.3, num_shadows_limit=(1, 4), shadow_intensity_range=(0.2, 0.5)),
-        A.Sharpen(p=0.6, alpha=(0.2, 0.5), lightness=(0.2, 0.6)),
-        A.Emboss(p=0.7, alpha=(0.1, 0.3), strength=(0.1, 0.3)),
-        A.ImageCompression(quality_range=(70, 90), p=0.7),
+        # A.RandomBrightnessContrast(brightness_limit=0.1, contrast_limit=0.1, p=0.5),
+        # A.ShiftScaleRotate(shift_limit=params["shift_limit"], scale_limit=params["scale_limit"], rotate_limit=params["rotate_limit"],
+        #                border_mode=cv2.BORDER_REFLECT_101, p=params["p"]),
+        # A.VerticalFlip(p=0.5),
+        # A.HorizontalFlip(p=0.5),
+        # A.RandomShadow(p=0.3, num_shadows_limit=(1, 4), shadow_intensity_range=(0.2, 0.5)),
+        # A.Sharpen(p=0.6, alpha=(0.2, 0.5), lightness=(0.2, 0.6)),
+        # A.Emboss(p=0.7, alpha=(0.1, 0.3), strength=(0.1, 0.3)),
+        # A.ImageCompression(quality_range=(70, 90), p=0.7),
         A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ToTensorV2()
     ])
@@ -99,7 +99,7 @@ class FolderBasedDataset(Dataset):
             tuple: (image tensor, integer label, image file path)
         """
         img_path = self.images[idx]
-        image = Image.open(img_path).convert("L")
+        image = Image.open(img_path).convert("RGB")
         image = np.array(image)
         label = (img_path).split("/")[-2]
         label = self.label_map_to_int[label]
